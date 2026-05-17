@@ -10,13 +10,13 @@ An automated job application agent that searches LinkedIn (and eventually other 
 ┌──────────────────────────────────────────────────────────┐
 │                   Airflow Scheduler                        │
 │  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐  │
-│  │ Job Search   │  │ Missing Info │  │ Friday Report │  │
-│  │ + Apply DAG  │  │ Check DAG    │  │ DAG           │  │
-│  │ (Wed, Fri)   │  │ (daily)      │  │ (Fri)         │  │
-│  └──────┬───────┘  └──────┬───────┘  └───────┬───────┘  │
-└─────────┼──────────────────┼──────────────────┼──────────┘
-          │                  │                  │
-┌─────────▼──────────────────▼──────────────────▼──────────┐
+│  │ Job Search   │  │ Friday Report │  │
+│  │ + Apply DAG  │  │ DAG           │  │
+│  │ (Wed, Fri)   │  │ (Fri)         │  │
+│  └──────┬───────┘  └───────┬───────┘                    │
+└─────────┼──────────────────┼────────────────────────────┘
+          │                  │
+┌─────────▼──────────────────▼────────────────────────────┐
 │                 my-job-agent Python Package                │
 │                                                           │
 │  ┌─────────────────┐  ┌──────────────────────────────┐   │
@@ -52,7 +52,7 @@ An automated job application agent that searches LinkedIn (and eventually other 
 ┌──────────────────────────▼───────────────────────────────┐
 │  PostgreSQL Database                                      │
 │                                                           │
-│  applied_jobs | pending_missing_info | search_results     │
+│  applied_jobs | search_results     │
 │  resume_versions | weekly_reports | config                │
 └───────────────────────────────────────────────────────────┘
 ```
@@ -80,24 +80,13 @@ An automated job application agent that searches LinkedIn (and eventually other 
 | url | TEXT | Job posting URL |
 | source | VARCHAR(50) | linkedin, indeed, etc. |
 | applied_at | TIMESTAMP | When submitted |
-| status | VARCHAR(20) | applied, pending_info, failed |
+| status | VARCHAR(20) | applied, blocked, failed |
+| block_reason | TEXT | Why blocked (missing info, scrape failed, etc.) |
 | match_score | DECIMAL(5,2) | JD-resume match % |
 | resume_version_id | INTEGER FK → resume_versions |
 | jd_raw | TEXT | Full job description text |
 | skills_extracted | JSONB | Skills/keywords from JD |
 | notes | TEXT | Any error or notes |
-
-### `pending_missing_info`
-| Column | Type | Description |
-|---|---|---|
-| id | SERIAL PK | |
-| job_id | VARCHAR(255) | Related job |
-| company | VARCHAR(500) | |
-| question | TEXT | The question asked on the form |
-| requested_at | TIMESTAMP | When email was sent |
-| responded_at | TIMESTAMP | When answer received (nullable) |
-| answer | TEXT | The answer (nullable) |
-| status | VARCHAR(20) | pending, answered, cancelled |
 
 ### `search_results`
 | Column | Type | Description |
@@ -190,10 +179,11 @@ The base resume in markdown format. Each tailored version saved as `resume/tailo
    - Fill standard fields (name, address, phone, LinkedIn, etc.)
    - Upload tailored resume PDF (converted from markdown)
    - Answer custom questions from resume context via LLM
-   - If question can't be answered → save to pending_missing_info, send email, skip
+   - If question can't be answered → save as blocked with reason, skip
    - Submit
    - Save tailored resume version
-7. **Post-run** — extract skill frequency from search results, store in search_results.skill_frequency
+7. **End-of-run** — send email summary listing all blocked jobs with their reasons
+8. **Post-run** — extract skill frequency from search results, store in search_results.skill_frequency
 
 ## Resume Tailoring
 
@@ -204,15 +194,13 @@ When applying, the agent:
 
 The resume-tailoring skill (`.agents/skills/resume-tailoring/SKILL.md`) controls tailoring rules.
 
-## Missing Info Flow
+## Blocked Jobs Flow
 
-1. Agent encounters unanswerable question → saves to `pending_missing_info` (status: pending)
-2. Sends email via `agent_commons/email.py` with subject: `[JOB-AGENT] Q-<id>: <company> - <question snippet>`
-3. A daily Airflow DAG runs `pending_missing_info` check:
-   - Polls email inbox for replies matching `[JOB-AGENT] Q-<id>` subject prefix
-   - Parses reply body as the answer
-   - Updates `pending_missing_info.answer` and sets status = answered
-4. On next search+apply run, re-process jobs that were skipped due to missing info (if answer received)
+When an application can't be completed (missing info, scrape failure, etc.):
+1. Save to `applied_jobs` with status = `blocked` and block_reason explaining why
+2. Continue to next job — don't block the batch
+3. At the end of the run, send one summary email listing all blocked jobs with their reasons
+4. On the next search+apply run, if a blocked job appears in search results again, retry applying it
 
 ## Friday Report
 
@@ -287,7 +275,7 @@ Located at `/home/joseph/MyProjects/agent_commons/`, a shared directory for all 
 |---|---|
 | Site blocks automation | CloakBrowser handles stealth; retry with different fingerprint |
 | Form can't be filled | Skip job, log reason, continue to next |
-| Missing info needed | Save to pending, send email, skip job, retry later |
+| Question can't be answered | Save as blocked with reason, skip, retry next run |
 | LLM call fails | Retry 2x, then fail the job apply for that run |
 | LinkedIn login fails | Log error, fail DAG, send alert email |
 | Email send fails | Log error, continue (report write to DB still occurs) |
