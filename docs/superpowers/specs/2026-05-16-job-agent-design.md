@@ -7,37 +7,37 @@ An automated job application agent that searches LinkedIn (and eventually other 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                   Airflow Scheduler                        │
-│  ┌──────────────┐  ┌──────────────┐  ┌───────────────┐  │
-│  │ Job Search   │  │ Friday Report │  │
-│  │ + Apply DAG  │  │ DAG           │  │
-│  │ (Wed, Fri)   │  │ (Fri)         │  │
-│  └──────┬───────┘  └───────┬───────┘                    │
-└─────────┼──────────────────┼────────────────────────────┘
+┌──────────────────────────────────────┐
+│                   Airflow Scheduler  │
+│  ┌──────────────┐  ┌──────────────┐  │
+│  │ Job Search   │  │ Friday Report│  │
+│  │ + Apply DAG  │  │ DAG          │  │
+│  │ (Wed, Fri)   │  │ (Fri)        │  │
+│  └──────┬───────┘  └───────┬──────┘  │
+└─────────┼──────────────────┼─────────┘
           │                  │
 ┌─────────▼──────────────────▼────────────────────────────┐
-│                 my-job-agent Python Package                │
-│                                                           │
-│  ┌─────────────────┐  ┌──────────────────────────────┐   │
-│  │  MCP Server      │  │  Browser Agent               │   │
-│  │  (FastMCP)       │  │  (Browser-use + CloakBrowser)│   │
-│  │                  │  │                              │   │
-│  │  Tools:          │  │  1. Load profile + config    │   │
-│  │  - search_jobs   │  │  2. Search LinkedIn (100)    │   │
-│  │  - apply_job     │  │  3. Score vs resume (≥80%)   │   │
-│  │  - get_status    │  │  4. Apply top 10             │   │
-│  │  - run_report    │  │  5. Tailor resume per JD     │   │
-│  │  - query_history │  │  6. Extract skill frequency  │   │
-│  └─────────────────┘  └──────────────────────────────┘   │
-│                                                           │
-│  ┌──────────────────┐  ┌────────────────────────────┐    │
-│  │  Resume Module    │  │  Skills (.agents/skills/) │    │
-│  │  - markdown store │  │  - application-rules      │    │
-│  │  - JD matching    │  │  - resume-tailoring       │    │
-│  │  - tailored copy  │  │  - answer-guide           │    │
-│  └──────────────────┘  └────────────────────────────┘    │
-└──────────────────────────┬───────────────────────────────┘
+│                 my-job-agent Python Package             │
+│                                                         │
+│  ┌─────────────────┐  ┌──────────────────────────────┐  │
+│  │  MCP Server      │  │  Browser Agent              │  │
+│  │  (FastMCP)       │  │  (Browser-use+CloakBrowser) │  │
+│  │                  │  │                             │  │
+│  │  Tools:          │  │  1. Load profile + config   │  │
+│  │  - search_jobs   │  │  2. Search LinkedIn (100)   │  │
+│  │  - apply_job     │  │  3. Score vs resume (≥80%)  │  │
+│  │  - get_status    │  │  4. Apply top 10            │  │
+│  │  - run_report    │  │  5. Tailor resume per JD    │  │
+│  │  - query_history │  │  6. Extract skill frequency │  │ 
+│  └─────────────────┘  └──────────────────────────────┘  │
+│                                                         │
+│  ┌──────────────────┐  ┌────────────────────────────┐   │
+│  │  Resume Module    │  │  Skills (.agents/skills/) │   │
+│  │  - markdown store │  │  - application-rules      │   │
+│  │  - JD matching    │  │  - resume-tailoring       │   │
+│  │  - tailored copy  │  │  - answer-guide           │   │
+│  └──────────────────┘  └────────────────────────────┘   │
+└──────────────────────────┬──────────────────────────────┘
                            │
 ┌──────────────────────────▼───────────────────────────────┐
 │  Agent Commons (shared module for all agents)             │
