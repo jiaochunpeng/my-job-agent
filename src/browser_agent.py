@@ -96,74 +96,76 @@ async def run_search_and_apply(
     skills = load_skills()
     base_resume = load_base_resume()
     session = get_session()
-    already_applied = {r.job_id for r in session.query(AppliedJob).filter(AppliedJob.status.in_(["applied", "blocked"])).all()}
+    try:
+        already_applied = {r.job_id for r in session.query(AppliedJob).filter(AppliedJob.status.in_(["applied", "blocked", "failed"])).all()}
 
-    all_results = []
+        all_results = []
 
-    for role in target_roles:
-        results = await search_linkedin(role, location=location, max_results=max_to_search, headless=headless)
-        all_results.extend(results)
+        for role in target_roles:
+            results = await search_linkedin(role, location=location, max_results=max_to_search, headless=headless)
+            all_results.extend(results)
 
-    from src.report import extract_skill_frequency
-    all_skills_freq = extract_skill_frequency(all_results)
+        from src.report import extract_skill_frequency
+        all_skills_freq = extract_skill_frequency(all_results)
 
-    scored_jobs = []
-    for job in all_results:
-        if job["url"] in already_applied:
-            continue
-        score = compute_match_score(job.get("jd", ""), base_resume)
-        if score >= min_match_score:
-            scored_jobs.append((score, job))
+        scored_jobs = []
+        for job in all_results:
+            if job["url"] in already_applied:
+                continue
+            score = compute_match_score(job.get("jd", ""), base_resume)
+            if score >= min_match_score:
+                scored_jobs.append((score, job))
 
-    scored_jobs.sort(key=lambda x: x[0], reverse=True)
-    top_jobs = scored_jobs[:max_to_apply]
+        scored_jobs.sort(key=lambda x: x[0], reverse=True)
+        top_jobs = scored_jobs[:max_to_apply]
 
-    blocked = []
-    applied = 0
-    for score, job in top_jobs:
-        tailored = tailor_resume(job.get("jd", ""), base_resume) if score >= min_match_score else base_resume
-        result = await apply_to_job(
-            job=job,
-            profile=profile,
-            resume=base_resume,
-            tailored_resume=tailored,
-            skills=skills,
-            headless=headless,
-        )
-        entry = AppliedJob(
-            job_id=job["url"],
-            title=job["title"],
-            company=job["company"],
-            url=job["url"],
+        blocked = []
+        applied = 0
+        for score, job in top_jobs:
+            tailored = tailor_resume(job.get("jd", ""), base_resume) if score >= min_match_score else base_resume
+            result = await apply_to_job(
+                job=job,
+                profile=profile,
+                resume=base_resume,
+                tailored_resume=tailored,
+                skills=skills,
+                headless=headless,
+            )
+            entry = AppliedJob(
+                job_id=job["url"],
+                title=job["title"],
+                company=job["company"],
+                url=job["url"],
+                source="linkedin",
+                status=result["status"],
+                block_reason=result.get("block_reason"),
+                match_score=score,
+                jd_raw=job.get("jd"),
+            )
+            session.add(entry)
+            if result["status"] == "blocked":
+                blocked.append(result)
+            else:
+                applied += 1
+
+            rv = ResumeVersion(
+                version=f"tailored-{job['url'].split('/')[-1][:30]}",
+                content_md=tailored,
+                source_job_id=job["url"],
+            )
+            session.add(rv)
+
+        sr = SearchResult(
+            keywords=", ".join(target_roles),
             source="linkedin",
-            status=result["status"],
-            block_reason=result.get("block_reason"),
-            match_score=score,
-            jd_raw=job.get("jd"),
+            results=all_results,
+            skill_frequency=all_skills_freq,
+            applied_count=applied,
         )
-        session.add(entry)
-        if result["status"] == "blocked":
-            blocked.append(result)
-        else:
-            applied += 1
-
-        rv = ResumeVersion(
-            version=f"tailored-{job['url'].split('/')[-1][:30]}",
-            content_md=tailored,
-            source_job_id=job["url"],
-        )
-        session.add(rv)
-
-    sr = SearchResult(
-        keywords=", ".join(target_roles),
-        source="linkedin",
-        results=all_results,
-        skill_frequency=all_skills_freq,
-        applied_count=applied,
-    )
-    session.add(sr)
-    session.commit()
-    session.close()
+        session.add(sr)
+        session.commit()
+    finally:
+        session.close()
 
     if blocked:
         send_blocked_summary(blocked)

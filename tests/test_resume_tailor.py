@@ -32,7 +32,7 @@ def test_compute_match_score_handles_non_numeric(sample_jd, sample_resume):
         mock_client.query.return_value = "around 80%"
         mock_get.return_value = mock_client
         score = compute_match_score(sample_jd, sample_resume)
-        assert score == 0
+        assert score == 80.0
 
 def test_tailor_resume(sample_jd, sample_resume):
     with patch("src.resume_tailor.get_llm_client") as mock_get:

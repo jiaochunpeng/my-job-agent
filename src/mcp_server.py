@@ -2,23 +2,21 @@ from fastmcp import FastMCP
 from src.db import AppliedJob, SearchResult
 from agent_commons.db import get_session
 from src.browser_agent import run_search_and_apply
-from types import SimpleNamespace
 import asyncio
 
 
 def create_server() -> FastMCP:
     mcp = FastMCP("my-job-agent")
-    mcp._tool_manager = SimpleNamespace(_tools=[])
 
     @mcp.tool()
     def search_and_apply(roles: list[str] = None) -> dict:
+        """Run a job search and apply cycle for the given roles."""
         result = asyncio.run(run_search_and_apply(target_roles=roles))
         return result
 
-    _tool_register(mcp, "search_and_apply")
-
     @mcp.tool()
     def get_history(limit: int = 20) -> list[dict]:
+        """Get recently applied jobs."""
         session = get_session()
         jobs = (
             session.query(AppliedJob)
@@ -40,10 +38,9 @@ def create_server() -> FastMCP:
             for j in jobs
         ]
 
-    _tool_register(mcp, "get_history")
-
     @mcp.tool()
     def get_status() -> dict:
+        """Get current status counts."""
         session = get_session()
         applied = (
             session.query(AppliedJob)
@@ -63,18 +60,15 @@ def create_server() -> FastMCP:
         session.close()
         return {"applied": applied, "blocked": blocked, "failed": failed}
 
-    _tool_register(mcp, "get_status")
-
     @mcp.tool()
     def run_report() -> dict:
+        """Generate and send the weekly report immediately."""
         from src.report import generate_weekly_report
-
         return asyncio.run(generate_weekly_report())
-
-    _tool_register(mcp, "run_report")
 
     @mcp.tool()
     def get_skill_frequency(limit: int = 20) -> list[dict]:
+        """Get most common skills from recent search results."""
         session = get_session()
         results = (
             session.query(SearchResult)
@@ -91,14 +85,4 @@ def create_server() -> FastMCP:
         sorted_skills = sorted(freq.items(), key=lambda x: x[1], reverse=True)[:limit]
         return [{"skill": s, "count": c} for s, c in sorted_skills]
 
-    _tool_register(mcp, "get_skill_frequency")
-
     return mcp
-
-
-def _tool_register(mcp: FastMCP, name: str) -> None:
-    key = f"tool:{name}@"
-    ft = mcp._local_provider._components.get(key)
-    if ft:
-        mcp._tool_manager._tools.append(ft)
-        setattr(mcp, name, ft.fn)

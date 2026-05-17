@@ -16,10 +16,8 @@ JOB DESCRIPTION:
 RESUME:
 {resume}"""
     result = client.query(prompt, temperature=0.1, max_tokens=10)
-    cleaned = result.strip()
-    if cleaned.isdigit():
-        return float(cleaned)
-    return 0.0
+    match = re.search(r"\d+\.?\d*", result.strip())
+    return float(match.group()) if match else 0.0
 
 def tailor_resume(jd: str, resume: str, llm_client=None) -> str:
     client = llm_client or get_llm_client()
