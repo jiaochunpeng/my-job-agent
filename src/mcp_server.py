@@ -9,9 +9,9 @@ def create_server() -> FastMCP:
     mcp = FastMCP("my-job-agent")
 
     @mcp.tool()
-    def search_and_apply(roles: list[str] = None) -> dict:
+    async def search_and_apply(roles: list[str] = None) -> dict:
         """Run a job search and apply cycle for the given roles."""
-        result = asyncio.run(run_search_and_apply(target_roles=roles))
+        result = await run_search_and_apply(target_roles=roles)
         return result
 
     @mcp.tool()
@@ -61,10 +61,10 @@ def create_server() -> FastMCP:
         return {"applied": applied, "blocked": blocked, "failed": failed}
 
     @mcp.tool()
-    def run_report() -> dict:
+    async def run_report() -> dict:
         """Generate and send the weekly report immediately."""
         from src.report import generate_weekly_report
-        return asyncio.run(generate_weekly_report())
+        return await asyncio.to_thread(generate_weekly_report)
 
     @mcp.tool()
     def get_skill_frequency(limit: int = 20) -> list[dict]:

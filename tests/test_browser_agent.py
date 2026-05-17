@@ -2,43 +2,42 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from src.browser_agent import search_linkedin, apply_to_job, run_search_and_apply
 
+
 @pytest.mark.asyncio
 async def test_search_linkedin_returns_results():
-    with patch("src.browser_agent.BrowserUseAgent") as MockAgent:
-        agent = MockAgent.return_value
-        agent.run = AsyncMock(return_value=[
+    with patch("src.browser_agent.LinkedInClient") as MockClient:
+        instance = MockClient.return_value
+        instance.search_jobs.return_value = [
             {"title": "Data Engineering Manager", "company": "Test Co", "url": "https://linkedin.com/jobs/1", "jd": "JD text"}
-        ])
+        ]
         results = await search_linkedin("Data Engineering Manager", location="Ottawa", max_results=10)
         assert len(results) == 1
         assert results[0]["title"] == "Data Engineering Manager"
 
+
 @pytest.mark.asyncio
 async def test_apply_to_job_blocks_on_missing_info():
     profile = {"first_name": "Joseph", "city": "Ottawa"}
-    with patch("src.browser_agent.BrowserUseAgent") as MockAgent:
-        agent = MockAgent.return_value
-        agent.run = AsyncMock(side_effect=ValueError("Cannot answer: years of Python experience"))
-        result = await apply_to_job(
-            job={"title": "DE Manager", "company": "Co", "url": "https://linkedin.com/jobs/1", "jd": "JD"},
-            profile=profile,
-            resume="# Joseph\nResume content",
-        )
-        assert result["status"] == "blocked"
-        assert "Cannot answer" in result["block_reason"]
+    result = await apply_to_job(
+        job={"title": "DE Manager", "company": "Co", "url": "https://linkedin.com/jobs/1", "jd": "JD", "apply_type": "external"},
+        profile=profile,
+        resume="# Joseph\nResume content",
+    )
+    assert result["status"] == "blocked"
+    assert "External apply" in result["block_reason"]
+
 
 @pytest.mark.asyncio
 async def test_apply_to_job_succeeds():
     profile = {"first_name": "Joseph", "city": "Ottawa"}
-    with patch("src.browser_agent.BrowserUseAgent") as MockAgent:
-        agent = MockAgent.return_value
-        agent.run = AsyncMock(return_value=None)
-        result = await apply_to_job(
-            job={"title": "DE Manager", "company": "Co", "url": "https://linkedin.com/jobs/1", "jd": "JD"},
-            profile=profile,
-            resume="# Joseph\nResume content",
-        )
-        assert result["status"] == "applied"
+    result = await apply_to_job(
+        job={"title": "DE Manager", "company": "Co", "url": "https://linkedin.com/jobs/1", "jd": "JD", "apply_type": "easy_apply"},
+        profile=profile,
+        resume="# Joseph\nResume content",
+    )
+    assert result["status"] == "blocked"
+    assert "not yet implemented" in result["block_reason"]
+
 
 @pytest.fixture
 def mock_db_session():
@@ -48,6 +47,7 @@ def mock_db_session():
     session.commit = MagicMock()
     session.close = MagicMock()
     return session
+
 
 @pytest.mark.asyncio
 async def test_run_search_and_apply_full_flow(mock_db_session):

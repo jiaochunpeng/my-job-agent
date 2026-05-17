@@ -5,15 +5,10 @@ from src.llm_client import get_llm_client
 from src.config_loader import load_all_configs, load_skills
 from src.email_handler import send_blocked_summary
 from src.db import AppliedJob, SearchResult, ResumeVersion
+from src.linkedin_client import LinkedInClient
 from agent_commons.db import get_session
 from datetime import datetime, timezone
 
-class BrowserUseAgent:
-    """Minimal interface abstraction for browser-use agent.
-    In production, this wraps the actual Browser-use library + CloakBrowser."""
-
-    async def run(self, task: str, headless: bool = True):
-        raise NotImplementedError("Browser-use integration - see setup instructions")
 
 async def search_linkedin(
     role: str,
@@ -21,15 +16,13 @@ async def search_linkedin(
     max_results: int = 100,
     headless: bool = True,
 ) -> list[dict]:
-    agent = BrowserUseAgent()
-    task = f"""Go to LinkedIn Jobs, search for "{role}" in "{location}".
-Collect the first {max_results} job results.
-For each result, extract: title, company, url, and full job description.
-Return as JSON array of objects with keys: title, company, url, jd."""
-    result = await agent.run(task, headless=headless)
-    if isinstance(result, str):
-        return json.loads(result)
-    return result or []
+    client = LinkedInClient()
+    try:
+        jobs = client.search_jobs(role, location=location, max_results=max_results)
+        return jobs or []
+    finally:
+        client.close()
+
 
 async def apply_to_job(
     job: dict,
@@ -39,48 +32,29 @@ async def apply_to_job(
     skills: dict = None,
     headless: bool = True,
 ) -> dict:
-    agent = BrowserUseAgent()
-    skill_rules = (skills or {}).get("application-rules", "")
-    answer_guide = (skills or {}).get("answer-guide", "")
+    if job.get("apply_type") == "easy_apply":
+        return {
+            "status": "blocked",
+            "job_id": job.get("url"),
+            "title": job.get("title"),
+            "company": job.get("company"),
+            "block_reason": "Easy Apply requires browser automation - not yet implemented",
+        }
+    return {
+        "status": "blocked",
+        "job_id": job.get("url"),
+        "title": job.get("title"),
+        "company": job.get("company"),
+        "block_reason": f"External apply - please apply manually at {job.get('apply_url', 'N/A')}",
+    }
 
-    task = f"""Apply to this job: {job['title']} at {job['company']}
-URL: {job['url']}
-
-Profile info:
-- Name: {profile.get('first_name', '')} {profile.get('last_name', '')}
-- Address: {profile.get('address', '')}, {profile.get('city', '')}, {profile.get('province', '')} {profile.get('postal_code', '')}
-- Phone: {profile.get('phone', '')}
-- LinkedIn: {profile.get('linkedin', '')}
-
-Application rules:
-{skill_rules}
-
-Answer guide for custom questions:
-{answer_guide}
-
-Tailored resume (upload as PDF):
-{tailored_resume or resume}
-
-Steps:
-1. Navigate to the job URL
-2. Click "Apply" or "Easy Apply"
-3. Fill all required fields using the profile info above
-4. Upload the resume file (will be provided as PDF)
-5. For any custom questions (years of experience, skills, etc.), answer using the resume content
-6. If you CANNOT answer a required question, raise an error: "Cannot answer: <question text>"
-7. Submit the application"""
-    try:
-        await agent.run(task, headless=headless)
-        return {"status": "applied", "job_id": job.get("url"), "title": job.get("title")}
-    except Exception as e:
-        return {"status": "blocked", "job_id": job.get("url"), "title": job.get("title"), "block_reason": str(e)}
 
 async def run_search_and_apply(
     target_roles: list[str] = None,
     location: str = "Ottawa",
     max_to_search: int = 100,
     max_to_apply: int = 10,
-    min_match_score: float = 80.0,
+    min_match_score: float = None,
     headless: bool = True,
 ) -> dict:
     config = load_all_configs()
@@ -131,6 +105,7 @@ async def run_search_and_apply(
                 skills=skills,
                 headless=headless,
             )
+            result.setdefault("company", job["company"])
             entry = AppliedJob(
                 job_id=job["url"],
                 title=job["title"],

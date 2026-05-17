@@ -1,6 +1,9 @@
+import sys
+sys.path.insert(0, "/home/joseph/MyProjects/my-job-agent")
+
 from datetime import datetime, timedelta
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.providers.standard.operators.python import PythonOperator
 from src.browser_agent import run_search_and_apply
 from src.config_loader import load_all_configs
 import asyncio
@@ -32,7 +35,7 @@ with DAG(
     "job_search_apply",
     default_args=default_args,
     description="Search LinkedIn and apply to matching jobs",
-    schedule_interval="0 9 * * 3,5",
+    schedule="0 9 * * 3,5",
     start_date=datetime(2026, 5, 18),
     catchup=False,
     tags=["job-agent"],
@@ -40,5 +43,4 @@ with DAG(
     search_apply = PythonOperator(
         task_id="search_and_apply",
         python_callable=run_job_search,
-        provide_context=True,
     )
