@@ -1,4 +1,7 @@
-# Application Rules
+---
+name: application-rules
+description: Rules for filtering job applications - skip conditions, company blocklist, and preferences for remote/hybrid positions.
+---
 
 ## Skip Conditions
 - Never apply to jobs requiring security clearance

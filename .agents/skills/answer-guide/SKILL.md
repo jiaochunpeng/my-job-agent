@@ -1,4 +1,7 @@
-# Custom Question Answer Guide
+---
+name: answer-guide
+description: Provides pre-approved answers for common interview questions about Azure experience, management experience, years of experience, and salary expectations.
+---
 
 ## Azure Experience
 When asked about Azure experience:

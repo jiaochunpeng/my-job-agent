@@ -83,20 +83,56 @@ async def run_search_and_apply(
         all_skills_freq = extract_skill_frequency(all_results)
 
         scored_jobs = []
+        blocked = []
+        applied = 0
+
         for job in all_results:
             if job["url"] in already_applied:
                 continue
-            score = compute_match_score(job.get("jd", ""), base_resume)
+            try:
+                score = compute_match_score(job.get("jd", ""), base_resume)
+            except Exception as e:
+                entry = AppliedJob(
+                    job_id=job["url"],
+                    title=job.get("title"),
+                    company=job.get("company"),
+                    url=job["url"],
+                    source="linkedin",
+                    status="blocked",
+                    block_reason=f"LLM scoring failed: {e}",
+                    match_score=0.0,
+                    jd_raw=job.get("jd"),
+                )
+                session.add(entry)
+                blocked.append({"title": job.get("title"), "company": job.get("company"), "block_reason": f"LLM scoring failed: {e}"})
+                already_applied.add(job["url"])
+                continue
+
             if score >= min_match_score:
                 scored_jobs.append((score, job))
 
         scored_jobs.sort(key=lambda x: x[0], reverse=True)
         top_jobs = scored_jobs[:max_to_apply]
 
-        blocked = []
-        applied = 0
         for score, job in top_jobs:
-            tailored = tailor_resume(job.get("jd", ""), base_resume) if score >= min_match_score else base_resume
+            try:
+                tailored = tailor_resume(job.get("jd", ""), base_resume)
+            except Exception as e:
+                entry = AppliedJob(
+                    job_id=job["url"],
+                    title=job.get("title"),
+                    company=job.get("company"),
+                    url=job["url"],
+                    source="linkedin",
+                    status="blocked",
+                    block_reason=f"LLM tailoring failed: {e}",
+                    match_score=score,
+                    jd_raw=job.get("jd"),
+                )
+                session.add(entry)
+                blocked.append({"title": job.get("title"), "company": job.get("company"), "block_reason": f"LLM tailoring failed: {e}"})
+                continue
+
             result = await apply_to_job(
                 job=job,
                 profile=profile,
