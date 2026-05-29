@@ -18,4 +18,4 @@ For "years of experience in X":
 - If X is management: use 5+ years
 
 ## Salary Expectations
-If asked for salary: "Open to discussion based on role and responsibilities."
+If asked for salary: "Open to d****ssion based on role and responsibilities."
