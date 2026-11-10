@@ -17,7 +17,7 @@ def send_blocked_summary(blocked_jobs: list[dict], to: Optional[str] = None) -> 
     except Exception:
         pass
 
-def send_report_email(to: str, subject: str = "Daily Job Report", html_body: str = "") -> None:
+def send_report_email(to: str, html_body: str = "", subject: str = "Weekly Job Application Report") -> None:
     try:
         _get_client().send_report(to, subject=subject, html_body=html_body)
     except Exception:

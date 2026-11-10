@@ -1,0 +1,31 @@
+[project]
+name = "my-job-agent"
+version = "0.1.0"
+description = "Automated job-application agent: searches LinkedIn, tailors resumes, applies, and reports via Airflow"
+requires-python = ">=3.12"
+dependencies = [
+    "agent-commons",
+    "browser-use>=0.1.0",
+    "cloakbrowser>=0.1.0",
+    "fastmcp>=0.1.0",
+    "sqlalchemy>=2.0",
+    "psycopg2-binary>=2.9",
+    "httpx>=0.27",
+    "requests>=2.31",
+    "cryptography>=41.0",
+    "apache-airflow>=2.8",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+    "pytest-asyncio>=0.21",
+]
+
+[tool.uv.sources]
+agent-commons = { path = "../agent_commons", editable = true }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
